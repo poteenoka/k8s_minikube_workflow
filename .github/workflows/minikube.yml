@@ -1,0 +1,23 @@
+name: Minikube cluster
+
+on:
+  pull_request:
+
+jobs:
+  minikube:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        run: |
+          curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          chmod +x minikube
+          sudo mv minikube /usr/local/bin/
+          minikube start --driver=docker --wait=all
+
+      - name: Verify cluster
+        run: |
+          minikube kubectl -- get nodes -o wide
+          minikube status
