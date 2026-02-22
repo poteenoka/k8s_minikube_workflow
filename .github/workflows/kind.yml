@@ -26,3 +26,8 @@ jobs:
           sudo mv /tmp/kubectl /usr/local/bin/kubectl
           kubectl cluster-info --context kind-kind
           kubectl get nodes -o wide
+
+      - name: Print
+        run: |
+          echo "Nodes: $(kubectl get nodes --no-headers 2>/dev/null | wc -l)"
+          echo "Kubernetes version: $(kubectl version -o jsonpath='{.serverVersion.gitVersion}' 2>/dev/null)"

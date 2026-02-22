@@ -21,3 +21,8 @@ jobs:
         run: |
           minikube kubectl -- get nodes -o wide
           minikube status
+
+      - name: Print
+        run: |
+          echo "Nodes: $(minikube kubectl -- get nodes --no-headers 2>/dev/null | wc -l)"
+          echo "Kubernetes version: $(minikube kubectl -- version -o jsonpath='{.serverVersion.gitVersion}' 2>/dev/null)"
