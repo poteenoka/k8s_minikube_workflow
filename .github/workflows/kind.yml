@@ -1,0 +1,28 @@
+name: KinD cluster
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:x
+  kind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create KinD cluster
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind create cluster --wait 2m
+
+      - name: Verify cluster
+        run: |
+          curl -Lo /tmp/kubectl https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl
+          chmod +x /tmp/kubectl
+          sudo mv /tmp/kubectl /usr/local/bin/kubectl
+          kubectl cluster-info --context kind-kind
+          kubectl get nodes -o wide
