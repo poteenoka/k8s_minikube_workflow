@@ -6,11 +6,10 @@ on:
 jobs:
   pod-status:
     runs-on: ubuvm1
-    env:
-      KUBECONFIG: ${{ env.HOME }}/.kube/config-k8s:${{ env.HOME }}/.kube/config-k3
     steps:
-      - name: Kill existing SSH tunnels
+      - name: Set KUBECONFIG and kill existing SSH tunnels
         run: |
+          echo "KUBECONFIG=$HOME/.kube/config-k8s:$HOME/.kube/config-k3" >> $GITHUB_ENV
           pkill -f 'ssh -L 6443:127.0.0.1:6443 root@192.168.208.3' || true
           pkill -f 'ssh -L 6444:127.0.0.1:6444 root@192.168.203.2' || true
           sleep 2
