@@ -10,6 +10,7 @@ jobs:
       - name: Set KUBECONFIG and kill existing SSH tunnels
         run: |
           echo "KUBECONFIG=$HOME/.kube/config-k8s:$HOME/.kube/config-k3" >> $GITHUB_ENV
+          echo "KUBE_CONTEXT=k3s" >> $GITHUB_ENV
           pkill -f 'ssh -L 6443:127.0.0.1:6443 root@192.168.208.3' || true
           pkill -f 'ssh -L 6444:127.0.0.1:6444 root@192.168.203.2' || true
           sleep 2
@@ -20,13 +21,16 @@ jobs:
           ssh -o StrictHostKeyChecking=no -L 6444:127.0.0.1:6444 root@192.168.203.2 -f -N
           sleep 1
 
+      - name: List kubectl contexts
+        run: kubectl config get-contexts
+
       - name: Check pod status
         run: |
-          kubectl get pods -A --context k3s
+          kubectl get pods -A --context $KUBE_CONTEXT
       - name: Fail if any pods not Ready
         id: check
         run: |
-          not_ready=$(kubectl get pods -A --context k3s --no-headers 2>/dev/null | grep -v "Running\|Completed" | grep -v "^\s*$" || true)
+          not_ready=$(kubectl get pods -A --context $KUBE_CONTEXT --no-headers 2>/dev/null | grep -v "Running\|Completed" | grep -v "^\s*$" || true)
           if [ -n "$not_ready" ]; then
             echo "Pods not Running/Completed:"
             echo "$not_ready"
