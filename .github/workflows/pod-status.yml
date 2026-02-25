@@ -1,4 +1,4 @@
-name: Pod status (k3s)
+name: Pod status (k3s & k8s)
 
 on:
   workflow_dispatch:
@@ -9,8 +9,7 @@ jobs:
     steps:
       - name: Set KUBECONFIG and kill existing SSH tunnels
         run: |
-          echo "KUBECONFIG=$HOME/.kube/config-k8s:$HOME/.kube/config-k3" >> $GITHUB_ENV
-          echo "KUBE_CONTEXT=k3s" >> $GITHUB_ENV
+          echo "KUBECONFIG=$HOME/.kube/config-k3s:$HOME/.kube/config-k8s" >> $GITHUB_ENV
           pkill -f 'ssh -L 6443:127.0.0.1:6443 root@192.168.208.3' || true
           pkill -f 'ssh -L 6444:127.0.0.1:6444 root@192.168.203.2' || true
           sleep 2
@@ -24,19 +23,25 @@ jobs:
       - name: List kubectl contexts
         run: kubectl config get-contexts
 
-      - name: Check pod status
-        run: |
-          kubectl get pods -A --context $KUBE_CONTEXT
+      - name: Check pod status (k3s)
+        run: kubectl get pods -A --context k3s
+
+      - name: Check pod status (k8s)
+        run: kubectl get pods -A --context k8s
+
       - name: Fail if any pods not Ready
         id: check
         run: |
-          not_ready=$(kubectl get pods -A --context $KUBE_CONTEXT --no-headers 2>/dev/null | grep -v "Running\|Completed" | grep -v "^\s*$" || true)
-          if [ -n "$not_ready" ]; then
-            echo "Pods not Running/Completed:"
-            echo "$not_ready"
-            exit 1
-          fi
-          echo "All pods Running or Completed."
+          failed=0
+          for ctx in k3s k8s; do
+            not_ready=$(kubectl get pods -A --context $ctx --no-headers 2>/dev/null | grep -v "Running\|Completed" | grep -v "^\s*$" || true)
+            if [ -n "$not_ready" ]; then
+              echo "Pods not Running/Completed in context $ctx:"
+              echo "$not_ready"
+              failed=1
+            fi
+          done
+          [ $failed -eq 0 ] && echo "All pods Running or Completed in k3s and k8s." || exit 1
 
       - name: Notify Slack
         if: always()
@@ -47,5 +52,5 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: |
           if [ "$BUILD_SUCCESS" = "true" ]; then STATUS="succeeded"; else STATUS="failed"; fi
-          payload=$(printf '{"text":"Pod status (k3s) %s | branch: %s | %s"}' "$STATUS" "$BRANCH" "$RUN_URL")
+          payload=$(printf '{"text":"Pod status (k3s & k8s) %s | branch: %s | %s"}' "$STATUS" "$BRANCH" "$RUN_URL")
           curl -sS -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK"
