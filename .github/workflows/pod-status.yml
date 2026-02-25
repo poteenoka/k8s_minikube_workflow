@@ -5,7 +5,7 @@ on:
 
 jobs:
   pod-status:
-    runs-on: ubuvm1
+    runs-on: self-hosted
     steps:
       - name: Set KUBECONFIG and kill existing SSH tunnels
         run: |
