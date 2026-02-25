@@ -13,6 +13,7 @@ jobs:
         run: |
           kubectl get pods -A --context k3s
       - name: Fail if any pods not Ready
+        id: check
         run: |
           not_ready=$(kubectl get pods -A --context k3s --no-headers 2>/dev/null | grep -v "Running\|Completed" | grep -v "^\s*$" || true)
           if [ -n "$not_ready" ]; then
@@ -21,3 +22,15 @@ jobs:
             exit 1
           fi
           echo "All pods Running or Completed."
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          BUILD_SUCCESS: ${{ steps.check.outcome == 'success' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ "$BUILD_SUCCESS" = "true" ]; then STATUS="succeeded"; else STATUS="failed"; fi
+          payload=$(printf '{"text":"Pod status (k3s) %s | branch: %s | %s"}' "$STATUS" "$BRANCH" "$RUN_URL")
+          curl -sS -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK"
