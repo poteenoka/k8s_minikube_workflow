@@ -1,0 +1,58 @@
+
+name: Pod in-container check (HTTP + non-root)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: self-hosted
+    steps:
+      - name: Resolve pod
+        id: app
+        env:
+          TARGET_NS: default
+          POD_EXACT_NAME: ""
+          POD_NAME_PREFIX: drupal-helm-drupal
+        run: |
+          set -euo pipefail
+          if [ -n "${POD_EXACT_NAME:-}" ]; then
+            POD="$POD_EXACT_NAME"
+          else
+            POD=$(kubectl get pods -n "$TARGET_NS" --field-selector=status.phase=Running \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+              | grep "^${POD_NAME_PREFIX}" | head -1 || true)
+          fi
+          if [ -z "${POD:-}" ]; then
+            echo "Под не найден: ns=$TARGET_NS prefix=$POD_NAME_PREFIX"
+            exit 1
+          fi
+          echo "pod=$POD" >> "$GITHUB_OUTPUT"
+          echo "Pod: $POD"
+          kubectl get pod -n "$TARGET_NS" "$POD" -o wide
+
+      - name: В контейнере не root (uid != 0)
+        env:
+          TARGET_NS: default
+          CONTAINER: drupal
+        run: |
+          set -euo pipefail
+          POD="${{ steps.app.outputs.pod }}"
+          kubectl exec -n "$TARGET_NS" "$POD" -c "$CONTAINER" -- \
+            sh -c 'echo "uid=$(id -u) user=$(id -un)"; test "$(id -u)" -ne 0'
+
+      - name: Тестовый HTTP изнутри пода (localhost)
+        env:
+          TARGET_NS: default
+          CONTAINER: drupal
+          DRUPAL_HTTP_PORT: "8080"
+        run: |
+          set -euo pipefail
+          POD="${{ steps.app.outputs.pod }}"
+          URL="http://127.0.0.1:${DRUPAL_HTTP_PORT}/"
+          kubectl exec -n "$TARGET_NS" "$POD" -c "$CONTAINER" -- \
+            curl -sfS --max-time 20 -w " http_code=%{http_code}\n" -o /dev/null "$URL" \
+            || kubectl exec -n "$TARGET_NS" "$POD" -c "$CONTAINER" -- \
+            wget -q --timeout=20 -O /dev/null "$URL"
