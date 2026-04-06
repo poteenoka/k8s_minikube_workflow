@@ -1,0 +1,55 @@
+name: Validate Kubernetes manifests (kubeconform)
+
+on:
+  push:
+    paths:
+      - "manifests/**"
+      - ".github/workflows/kubeconform.yml"
+  pull_request:
+    paths:
+      - "manifests/**"
+      - ".github/workflows/kubeconform.yml"
+  workflow_dispatch:
+
+jobs:
+  kubeconform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: kubeconform (Docker)
+        id: kubeconform
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            ghcr.io/yannh/kubeconform:latest \
+            -kubernetes-version 1.30.0 \
+            -summary \
+            -strict \
+            manifests/
+
+      - name: Summary в GitHub Actions
+        if: always()
+        run: |
+          {
+            echo "## Kubeconform"
+            if [ "${{ steps.kubeconform.outcome }}" = "success" ]; then
+              echo "Статус: **успех**"
+            else
+              echo "Статус: **ошибка** — см. лог шага kubeconform"
+            fi
+            echo ""
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Slack (если задан SLACK_WEBHOOK_URL)
+        if: always()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          [ -n "${SLACK_WEBHOOK:-}" ] || exit 0
+          if [ "${{ steps.kubeconform.outcome }}" = "success" ]; then STATUS="succeeded"; else STATUS="failed"; fi
+          payload=$(printf '{"text":"Kubeconform %s | %s | branch/ref: %s"}' "$STATUS" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "${{ github.ref_name }}")
+          curl -sS -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK"
