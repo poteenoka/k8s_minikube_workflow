@@ -1,0 +1,45 @@
+# Раннер в кластере: curl до runner-smoke + проверка, что процесс в smoke-поде не root (kubectl exec).
+# Перед запуском: kubectl apply -f smoke-web.yaml (репо 11KubBaseObj/githubrunner).
+# У SA раннера в кластере должно быть право pods/exec (и get/list pods) в namespace githubrunner.
+
+name: Runner namespace smoke HTTP
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: self-hosted
+    env:
+     
+      KUBE_CONTEXT: ""
+    steps:
+      - name: Curl runner-smoke Service
+        env:
+          SMOKE_URL: http://runner-smoke.githubrunner.svc.cluster.local
+        run: |
+          set -euo pipefail
+          body=$(curl -sfS --max-time 15 "$SMOKE_URL/")
+          echo "$body" | grep -q 'runner-smoke-ok'
+
+      - name: В smoke-контейнере не root (uid != 0)
+        env:
+          SMOKE_NS: githubrunner
+          SMOKE_LABEL: app=runner-smoke
+          CONTAINER: nginx
+        run: |
+          set -euo pipefail
+          if [ -n "${KUBE_CONTEXT:-}" ]; then
+            k() { kubectl --context "$KUBE_CONTEXT" "$@"; }
+          else
+            k() { kubectl "$@"; }
+          fi
+          POD=$(k get pods -n "$SMOKE_NS" -l "$SMOKE_LABEL" \
+            --field-selector=status.phase=Running \
+            -o jsonpath='{.items[0].metadata.name}')
+          [ -n "${POD:-}" ] || { echo "Под runner-smoke не найден"; exit 1; }
+          echo "Pod: $POD"
+          k exec -n "$SMOKE_NS" "$POD" -c "$CONTAINER" -- \
+            sh -c 'echo "uid=$(id -u) user=$(id -un)"; test "$(id -u)" -ne 0'
